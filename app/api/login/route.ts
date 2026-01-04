@@ -1,27 +1,53 @@
-import { NextResponse } from "next/server";
+import { connectMongoDB } from "@/lib/mongodb";
+import User from "@/models/User";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { connectDB } from "@/lib/db";
-import User from "@/models/User";
-
-const JWT_SECRET = process.env.JWT_SECRET as string;
+import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
-  const { email, password } = await req.json();
+  try {
+    const { email, password } = await req.json() as { email: string; password: string };
+    if (!email || !password) {
+      return NextResponse.json(
+        { message: "Champs manquants" },
+        { status: 400 }
+      );
+    }
 
-  await connectDB();
-  const user = await User.findOne({ email });
+    // Connexion MongoDB
+    await connectMongoDB();
 
-  if (!user) {
-    return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 401 });
+    // Chercher l'utilisateur
+    const user = await User.findOne({ email });
+    if (!user) {
+      return NextResponse.json(
+        { message: "Utilisateur introuvable" },
+        { status: 401 }
+      );
+    }
+
+    // Vérifier le mot de passe
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return NextResponse.json(
+        { message: "Mot de passe incorrect" },
+        { status: 401 }
+      );
+    }
+
+    // Générer le token JWT
+    const token = jwt.sign(
+      { id: user._id, email: user.email },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "7d" }
+    );
+
+    return NextResponse.json({ token });
+  } catch (error) {
+    console.error("Login error:", error);
+    return NextResponse.json(
+      { message: "Erreur serveur" },
+      { status: 500 }
+    );
   }
-
-  const ok = await bcrypt.compare(password, user.password);
-  if (!ok) {
-    return NextResponse.json({ error: "Mot de passe incorrect" }, { status: 401 });
-  }
-
-  const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
-
-  return NextResponse.json({ token });
 }
