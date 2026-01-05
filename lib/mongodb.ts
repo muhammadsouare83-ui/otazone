@@ -6,8 +6,15 @@ if (!MONGODB_URI) {
   throw new Error("MONGODB_URI non défini");
 }
 
-let cached = global.mongoose;
+// Déclarer global pour TypeScript
+declare global {
+  var mongoose: {
+    conn: typeof mongoose | null;
+    promise: Promise<typeof mongoose> | null;
+  };
+}
 
+let cached = global.mongoose;
 if (!cached) {
   cached = global.mongoose = { conn: null, promise: null };
 }
