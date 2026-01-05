@@ -1,24 +1,24 @@
-import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { connectDB } from "@/lib/db";
+import { connectMongoDB } from "@/lib/mongodb";
 import User from "@/models/User";
+import bcrypt from "bcryptjs";
+import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
-  const { email, password } = await req.json();
+  try {
+    const { email, password } = await req.json() as { email: string; password: string };
+    if (!email || !password) return NextResponse.json({ message: "Champs manquants" }, { status: 400 });
 
-  if (!email || !password) {
-    return NextResponse.json({ error: "Champs manquants" }, { status: 400 });
+    await connectMongoDB();
+
+    const userExist = await User.findOne({ email });
+    if (userExist) return NextResponse.json({ message: "Utilisateur déjà existant" }, { status: 409 });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await User.create({ email, password: hashedPassword });
+
+    return NextResponse.json({ message: "Compte créé avec succès" }, { status: 201 });
+  } catch (error) {
+    console.error("Register error:", error);
+    return NextResponse.json({ message: "Erreur serveur" }, { status: 500 });
   }
-
-  await connectDB();
-
-  const exist = await User.findOne({ email });
-  if (exist) {
-    return NextResponse.json({ error: "Email déjà utilisé" }, { status: 400 });
-  }
-
-  const hash = await bcrypt.hash(password, 10);
-  await User.create({ email, password: hash });
-
-  return NextResponse.json({ success: true });
 }
